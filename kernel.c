@@ -32,14 +32,20 @@ void putchar(char ch) {
 
 void kernel_main(void) {
     memset(__bss, 0, (size_t) __bss_end - (size_t) __bss);
+    // printf関数の実装確認
     printf("\n\nHello %s\n", "World!");
     printf("1 + 2 = %d, %x\n", 1 + 2, 0x1234abcd);
 
+    // 標準ライブラリの実装確認
     if(!strcmp("abc", "aaa")) {
         printf("s1 == s2\n");
     } else {
-        printf("s1 != s2");
+        printf("s1 != s2\n");
     }
+
+    // kernel panic処理の確認
+    PANIC("booted!");
+    printf("unreachable here\n");
 
     for (;;) {
         __asm__ __volatile__("wfi");
