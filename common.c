@@ -21,8 +21,8 @@ void printf(const char *fmt, ...) {
                     while (*s) {
                         putchar(*s);
                         s++;
-                    break;
                     }
+                    break;
                 }
                 case 'd': {
                     int value = va_arg(vargs, int);
