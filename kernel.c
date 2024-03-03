@@ -9,6 +9,9 @@ extern char __bss[], __bss_end[], __stack_top[];
 extern char __free_ram[], __free_ram_end[];
 
 struct process procs[PROCS_MAX];
+struct process *current_proc;   // 現在実行中のプロセス
+struct process *idle_proc;      // アイドルプロセス
+
 
 paddr_t alloc_pages(uint32_t n) {
     static paddr_t next_paddr = (paddr_t) __free_ram;
@@ -196,6 +199,27 @@ struct process *create_process(uint32_t pc) {
     return proc;
 }
 
+void yield(void) {
+    // 実行可能なプロセスを探す
+    struct process *next = idle_proc;
+    for (int i = 0; i < PROCS_MAX; i++) {
+        struct process *proc = &procs[(current_proc->pid + i) % PROCS_MAX];
+        if (proc->state == PROC_RUNNABLE && proc->pid > 0) {
+            next = proc;
+            break;
+        }
+    }
+
+    // 現在実行中のプロセス以外に、実行可能なプロセスがない。戻って処理を実行する。
+    if (next == current_proc)
+        return;
+
+    // コンテキストスイッチ
+    struct process *prev = current_proc;
+    current_proc = next;
+    switch_context(&prev->sp, &next->sp);
+}
+
 void handle_trap(struct trap_frame *f) {
     uint32_t scause = READ_CSR(scause);
     uint32_t stval = READ_CSR(stval);
@@ -211,7 +235,7 @@ void proc_a_entry(void) {
     printf("starting process A\n");
     while (1) {
         putchar('A');
-        switch_context(&proc_a->sp, &proc_b->sp);
+        yield();
 
         for (int i = 0; i < 30000000; i++) {
             __asm__ __volatile__("nop");
@@ -223,7 +247,7 @@ void proc_b_entry(void) {
     printf("starting process B\n");
     while (1) {
         putchar('B');
-        switch_context(&proc_b->sp, &proc_a->sp);
+        yield();
 
         for (int i = 0; i < 30000000; i++) {
             __asm__ __volatile__("nop");
@@ -250,13 +274,19 @@ void kernel_main(void) {
     printf("alloc pages test: paddr0=%x\n", paddr0);
     printf("alloc pages test: paddr1=%x\n", paddr1);
 
-    proc_a = create_process((uint32_t) proc_a_entry);
-    proc_b = create_process((uint32_t) proc_b_entry);
-    proc_a_entry();
 
     //例外処理
     WRITE_CSR(stvec, (uint32_t) kernel_entry);
-    __asm__ __volatile__("unimp");
+
+    idle_proc = create_process((uint32_t) NULL);
+    idle_proc->pid = -1;                        // idle
+    current_proc = idle_proc;
+
+    proc_a = create_process((uint32_t) proc_a_entry);
+    proc_b = create_process((uint32_t) proc_b_entry);
+
+    yield();
+    PANIC("switched to idle process");
 
     for (;;) {
         __asm__ __volatile__("wfi");
@@ -273,4 +303,3 @@ void boot(void) {
         : [stack_top] "r" (__stack_top)
     );
 }
-
